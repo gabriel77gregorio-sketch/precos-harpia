@@ -3,43 +3,75 @@ import { supabase } from './lib/supabase';
 import type { Produto, Categoria, Profile } from './types/database';
 import { initialCategorias, initialProdutos } from './data/initialCatalog';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { CartProvider } from './context/CartContext';
+import { CartDrawer } from './components/cart/CartDrawer';
+import { CartFloatingButton } from './components/cart/CartFloatingButton';
+
 import { Navbar } from './components/Navbar';
 import { SellerView } from './components/seller/SellerView';
 import { AdminView } from './components/admin/AdminView';
 import { InstallModal } from './components/InstallModal';
 import { usePWA } from './hooks/usePWA';
 import { Wifi, WifiOff } from 'lucide-react';
+import { getProdutoFamilia, isItemInsumo } from './lib/utils';
 
 const mockVendedores: Profile[] = [
   {
-    id: 'vend-1',
-    full_name: 'Carlos Mendes',
-    email: 'carlos.mendes@harpia.com.br',
+    id: 'vend-luciano',
+    full_name: 'Luciano',
+    email: 'luciano@harpia.com.br',
     phone: '(16) 99876-5432',
     role: 'seller',
-    comissao_porcentagem: 5.0,
+    comissao_porcentagem: 8.0,
+    vendedor_key: 'luciano',
     ativo: true,
     created_at: '',
     updated_at: ''
   },
   {
-    id: 'vend-2',
-    full_name: 'Mariana Silveira',
-    email: 'mariana.silveira@harpia.com.br',
+    id: 'vend-wendel',
+    full_name: 'Wendel',
+    email: 'wendel@harpia.com.br',
     phone: '(16) 98123-4567',
     role: 'seller',
-    comissao_porcentagem: 6.5,
+    comissao_porcentagem: 6.0,
+    vendedor_key: 'wendel',
     ativo: true,
     created_at: '',
     updated_at: ''
   },
   {
-    id: 'vend-3',
-    full_name: 'Roberto Agro Consultoria',
-    email: 'roberto@agro.com.br',
-    phone: '(17) 99765-4321',
+    id: 'vend-harpia',
+    full_name: 'Harpia',
+    email: 'vendas@harpia.com.br',
+    phone: '(16) 99765-4321',
     role: 'seller',
-    comissao_porcentagem: 3.5,
+    comissao_porcentagem: 4.0,
+    vendedor_key: 'harpia',
+    ativo: true,
+    created_at: '',
+    updated_at: ''
+  },
+  {
+    id: 'vend-loja',
+    full_name: 'Loja Harpia',
+    email: 'loja@harpia.com.br',
+    phone: '(16) 3322-1100',
+    role: 'seller',
+    comissao_porcentagem: 12.0,
+    vendedor_key: 'loja',
+    ativo: true,
+    created_at: '',
+    updated_at: ''
+  },
+  {
+    id: 'vend-balcao',
+    full_name: 'Balcão',
+    email: 'balcao@harpia.com.br',
+    phone: '(16) 3322-1100',
+    role: 'seller',
+    comissao_porcentagem: 0.0,
+    vendedor_key: 'balcao',
     ativo: true,
     created_at: '',
     updated_at: ''
@@ -54,10 +86,16 @@ const MainContent: React.FC = () => {
   // Inicialização direta e imediata com o catálogo completo
   const [produtos, setProdutos] = useState<Produto[]>(() => {
     try {
-      const cached = localStorage.getItem('harpia_cached_produtos_v4');
+      const cached = localStorage.getItem('harpia_cached_produtos_v7');
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length >= 50) return parsed;
+        if (Array.isArray(parsed) && parsed.length >= 60) {
+          return parsed.map((p: Produto) => ({
+            ...p,
+            familia: getProdutoFamilia(p),
+            secao: isItemInsumo(p) ? 'insumos' : 'racoes'
+          }));
+        }
       }
     } catch (e) {
       console.warn('Erro ao ler cache de produtos:', e);
@@ -67,7 +105,7 @@ const MainContent: React.FC = () => {
 
   const [categorias, setCategorias] = useState<Categoria[]>(() => {
     try {
-      const cached = localStorage.getItem('harpia_cached_categorias_v4');
+      const cached = localStorage.getItem('harpia_cached_categorias_v5');
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length >= 7) return parsed;
@@ -80,7 +118,7 @@ const MainContent: React.FC = () => {
 
   const [vendedores, setVendedores] = useState<Profile[]>(() => {
     try {
-      const cached = localStorage.getItem('harpia_cached_vendedores_v4');
+      const cached = localStorage.getItem('harpia_cached_vendedores_v5');
       if (cached) return JSON.parse(cached);
     } catch (e) {
       console.warn('Erro ao ler cache de vendedores:', e);
@@ -118,21 +156,42 @@ const MainContent: React.FC = () => {
       if (catRes.data && catRes.data.length > 0) {
         currentCats = catRes.data as Categoria[];
         setCategorias(currentCats);
-        localStorage.setItem('harpia_cached_categorias_v4', JSON.stringify(currentCats));
+        localStorage.setItem('harpia_cached_categorias_v5', JSON.stringify(currentCats));
       }
 
       if (prodRes.data && prodRes.data.length > 0) {
-        const mapped = prodRes.data.map((p: any) => ({
-          ...p,
-          categoria: currentCats.find((c) => c.id === p.categoria_id) || null
-        }));
-        setProdutos(mapped);
-        localStorage.setItem('harpia_cached_produtos_v4', JSON.stringify(mapped));
+        const mapped = prodRes.data.map((p: any) => {
+          const localMatch = initialProdutos.find(
+            (init) => init.id === p.id || (init.sku && init.sku === p.sku) || init.nome.toLowerCase() === p.nome.toLowerCase()
+          );
+
+          const categoria = currentCats.find((c) => c.id === p.categoria_id) || localMatch?.categoria || null;
+          const produtoMesclado: Produto = {
+            ...localMatch,
+            ...p,
+            categoria,
+            secao: localMatch?.secao || (isItemInsumo(p) ? 'insumos' : 'racoes'),
+            familia: localMatch?.familia || getProdutoFamilia({ ...p, categoria }),
+            precos_vendedores: p.precos_vendedores || localMatch?.precos_vendedores
+          };
+          return produtoMesclado;
+        });
+
+        // Garante que todos os 66 produtos do catálogo oficial permaneçam presentes
+        const idsPresentes = new Set(mapped.map((p: Produto) => p.id));
+        const nomesPresentes = new Set(mapped.map((p: Produto) => p.nome.toLowerCase()));
+        const produtosFaltantes = initialProdutos.filter(
+          (init) => !idsPresentes.has(init.id) && !nomesPresentes.has(init.nome.toLowerCase())
+        );
+        const listaCompleta = [...mapped, ...produtosFaltantes];
+
+        setProdutos(listaCompleta);
+        localStorage.setItem('harpia_cached_produtos_v7', JSON.stringify(listaCompleta));
       }
 
       if (profRes.data && profRes.data.length > 0) {
         setVendedores(profRes.data as Profile[]);
-        localStorage.setItem('harpia_cached_vendedores_v4', JSON.stringify(profRes.data));
+        localStorage.setItem('harpia_cached_vendedores_v5', JSON.stringify(profRes.data));
       }
     } catch (err) {
       console.warn('Operando com dados locais:', err);
@@ -203,6 +262,10 @@ const MainContent: React.FC = () => {
         </div>
       </footer>
 
+      {/* Carrinho de Compras */}
+      <CartFloatingButton />
+      <CartDrawer />
+
       {/* Modal PWA */}
       <InstallModal
         isOpen={isInstallModalOpen}
@@ -217,7 +280,9 @@ const MainContent: React.FC = () => {
 export default function App() {
   return (
     <AuthProvider>
-      <MainContent />
+      <CartProvider>
+        <MainContent />
+      </CartProvider>
     </AuthProvider>
   );
 }

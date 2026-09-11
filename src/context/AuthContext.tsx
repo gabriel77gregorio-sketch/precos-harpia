@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import type { Profile } from '../types/database';
+import type { Profile, VendedorKey } from '../types/database';
 
 interface AuthContextType {
   user: any | null;
@@ -10,20 +10,21 @@ interface AuthContextType {
   isSeller: boolean;
   signIn: (email: string, pass: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
-  switchDemoUser: (role: 'admin' | 'seller', customCommission?: number, name?: string) => void;
+  switchDemoUser: (role: 'admin' | 'seller', customCommission?: number, name?: string, vendedorKey?: VendedorKey) => void;
   refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Perfil inicial padrão para modo vendedor demo
+// Perfil inicial padrão para modo vendedor real demo (Luciano)
 const DEMO_SELLER: Profile = {
-  id: 'demo-seller-id',
-  full_name: 'Carlos Mendes (Vendedor)',
-  email: 'carlos.mendes@harpia.com.br',
+  id: 'demo-luciano-id',
+  full_name: 'Luciano (Vendedor)',
+  email: 'luciano@harpia.com.br',
   role: 'seller',
   phone: '(16) 99876-5432',
-  comissao_porcentagem: 4.5, // 4,5% de comissão
+  comissao_porcentagem: 8.0, // Tabela Luciano 8%
+  vendedor_key: 'luciano',
   ativo: true,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString()
@@ -36,10 +37,12 @@ const DEMO_ADMIN: Profile = {
   role: 'admin',
   phone: '(16) 3322-1100',
   comissao_porcentagem: 0,
+  vendedor_key: 'balcao',
   ativo: true,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString()
 };
+
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<any | null>(null);
@@ -113,7 +116,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('harpia_demo_profile');
   };
 
-  const switchDemoUser = (role: 'admin' | 'seller', customCommission = 5.0, name?: string) => {
+  const switchDemoUser = (role: 'admin' | 'seller', customCommission = 8.0, name?: string, vendedorKey?: VendedorKey) => {
     let newProfile: Profile;
     if (role === 'admin') {
       newProfile = { ...DEMO_ADMIN };
@@ -121,7 +124,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       newProfile = {
         ...DEMO_SELLER,
         full_name: name || 'Vendedor Representante',
-        comissao_porcentagem: customCommission
+        comissao_porcentagem: customCommission,
+        vendedor_key: vendedorKey || 'luciano'
       };
     }
     setProfile(newProfile);

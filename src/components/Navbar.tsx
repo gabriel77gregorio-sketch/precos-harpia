@@ -3,6 +3,8 @@ import { useAuth } from '../context/AuthContext';
 import { UserCheck, Shield, ChevronDown, Check, Smartphone } from 'lucide-react';
 import { formatPercent } from '../lib/utils';
 
+import type { VendedorKey } from '../types/database';
+
 interface NavbarProps {
   onOpenInstallModal: () => void;
   isInstalled: boolean;
@@ -12,13 +14,23 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenInstallModal, isInstalled 
   const { profile, isAdmin, isSeller, switchDemoUser } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
-  // Lista de simulação de vendedores para teste ágil de regras de negócio
-  const demoSellers = [
-    { name: 'Carlos Mendes', role: 'seller' as const, commission: 5.0, label: 'Carlos (Comissão 5,0%)' },
-    { name: 'Mariana Silveira', role: 'seller' as const, commission: 6.5, label: 'Mariana (Comissão 6,5%)' },
-    { name: 'Roberto Agro', role: 'seller' as const, commission: 3.5, label: 'Roberto (Comissão 3,5%)' },
-    { name: 'Admin Geral', role: 'admin' as const, commission: 0, label: 'Gestão Harpia (Administrador)' }
+  // Lista dos vendedores oficiais com suas respectivas tabelas de preço do PDF
+  const demoSellers: Array<{
+    name: string;
+    role: 'admin' | 'seller';
+    commission: number;
+    label: string;
+    vendedorKey: VendedorKey;
+    badge: string;
+  }> = [
+    { name: 'Luciano', role: 'seller', commission: 8.0, label: 'Luciano (Tabela 8%)', vendedorKey: 'luciano', badge: 'Tabela 8%' },
+    { name: 'Wendel', role: 'seller', commission: 6.0, label: 'Wendel (Tabela 6%)', vendedorKey: 'wendel', badge: 'Tabela 6%' },
+    { name: 'Harpia', role: 'seller', commission: 4.0, label: 'Harpia (Tabela 4%)', vendedorKey: 'harpia', badge: 'Tabela 4%' },
+    { name: 'Loja', role: 'seller', commission: 12.0, label: 'Loja Harpia (Tabela 12%)', vendedorKey: 'loja', badge: 'Tabela 12%' },
+    { name: 'Balcão', role: 'seller', commission: 0.0, label: 'Balcão (Tabela Integral)', vendedorKey: 'balcao', badge: 'Balcão' },
+    { name: 'Admin Geral', role: 'admin', commission: 0, label: 'Gestão Harpia (Administrador)', vendedorKey: 'balcao', badge: 'Admin' }
   ];
+
 
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-xs">
@@ -94,13 +106,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenInstallModal, isInstalled 
                   {demoSellers.map((s, idx) => {
                     const isCurrent =
                       (s.role === 'admin' && isAdmin) ||
-                      (s.role === 'seller' && isSeller && profile?.comissao_porcentagem === s.commission);
+                      (s.role === 'seller' && isSeller && (profile?.vendedor_key === s.vendedorKey || profile?.full_name?.includes(s.name)));
 
                     return (
                       <button
                         key={idx}
                         onClick={() => {
-                          switchDemoUser(s.role, s.commission, s.name);
+                          switchDemoUser(s.role, s.commission, s.name, s.vendedorKey);
                           setDropdownOpen(false);
                         }}
                         className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-slate-50 transition ${
