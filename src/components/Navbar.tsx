@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { UserCheck, Shield, ChevronDown, Check, Smartphone } from 'lucide-react';
-import { formatPercent } from '../lib/utils';
-
 import type { VendedorKey } from '../types/database';
 
 interface NavbarProps {
@@ -23,11 +21,11 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenInstallModal, isInstalled 
     vendedorKey: VendedorKey;
     badge: string;
   }> = [
-    { name: 'Luciano', role: 'seller', commission: 8.0, label: 'Luciano (Tabela 8%)', vendedorKey: 'luciano', badge: 'Tabela 8%' },
-    { name: 'Wendel', role: 'seller', commission: 6.0, label: 'Wendel (Tabela 6%)', vendedorKey: 'wendel', badge: 'Tabela 6%' },
-    { name: 'Harpia', role: 'seller', commission: 4.0, label: 'Harpia (Tabela 4%)', vendedorKey: 'harpia', badge: 'Tabela 4%' },
-    { name: 'Loja', role: 'seller', commission: 12.0, label: 'Loja Harpia (Tabela 12%)', vendedorKey: 'loja', badge: 'Tabela 12%' },
-    { name: 'Balcão', role: 'seller', commission: 0.0, label: 'Balcão (Tabela Integral)', vendedorKey: 'balcao', badge: 'Balcão' },
+    { name: 'Luciano', role: 'seller', commission: 8.0, label: 'Luciano (Consultor)', vendedorKey: 'luciano', badge: 'Luciano' },
+    { name: 'Wendel', role: 'seller', commission: 6.0, label: 'Wendel (Consultor)', vendedorKey: 'wendel', badge: 'Wendel' },
+    { name: 'Harpia', role: 'seller', commission: 4.0, label: 'Harpia (Consultor)', vendedorKey: 'harpia', badge: 'Harpia' },
+    { name: 'Loja', role: 'seller', commission: 12.0, label: 'Loja Harpia', vendedorKey: 'loja', badge: 'Loja' },
+    { name: 'Balcão', role: 'seller', commission: 0.0, label: 'Balcão Fábrica', vendedorKey: 'balcao', badge: 'Balcão' },
     { name: 'Admin Geral', role: 'admin', commission: 0, label: 'Gestão Harpia (Administrador)', vendedorKey: 'balcao', badge: 'Admin' }
   ];
 
@@ -49,7 +47,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenInstallModal, isInstalled 
               Tabela Oficial
             </span>
             <h1 className="text-xs sm:text-sm font-bold text-slate-800 leading-tight">
-              Preços & Comissões
+              Preços & Catálogo
             </h1>
           </div>
         </div>
@@ -86,7 +84,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenInstallModal, isInstalled 
                 </span>
                 {isSeller && (
                   <span className="text-[10px] text-emerald-700 font-bold leading-none block">
-                    Comissão: {formatPercent(profile?.comissao_porcentagem)}
+                    Consultor Harpia
                   </span>
                 )}
               </div>

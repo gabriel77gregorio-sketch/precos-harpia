@@ -46,7 +46,8 @@ export interface Produto {
   unidade_tipo: UnidadeTipo;
   peso_unitario?: number | null; // Em kg (ex: 10, 20, 25, 30, 40, 50, 1000)
   preco_base: number; // Preço oficial balcão / base da fábrica
-  preco_minimo?: number | null; // Preço piso para negociação
+  preco_anterior?: number | null; // Preço anterior utilizado para comparação (visível apenas para admin)
+  preco_minimo?: number | null; // Preço piso para negociação (legado)
   precos_vendedores?: PrecosVendedores;
   secao?: TipoSecao; // 'racoes' ou 'insumos'
   familia?: string; // Harmilk, Harbeef, Harpig, Aves, H Horse, Harsheep, Harphos, Insumos

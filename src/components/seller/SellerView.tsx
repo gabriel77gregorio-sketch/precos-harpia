@@ -16,9 +16,10 @@ import {
   ShoppingCart,
   FlaskConical
 } from 'lucide-react';
-import { formatPercent, getFamiliaColorConfig, isItemInsumo, matchProdutoFamilia } from '../../lib/utils';
+import { getFamiliaColorConfig, isItemInsumo, matchProdutoFamilia } from '../../lib/utils';
 import { MateriasPrimasTable } from './MateriasPrimasTable';
 import { ReceitasView } from './ReceitasView';
+import { SellerPricingToolbar } from './SellerPricingToolbar';
 import { initialInsumos } from '../../data/initialInsumos';
 import { initialFormulas } from '../../data/initialFormulas';
 
@@ -48,7 +49,6 @@ export const SellerView: React.FC<SellerViewProps> = ({
   // Modal de Detalhes do Produto Selecionado
   const [selectedProduct, setSelectedProduct] = useState<Produto | null>(null);
 
-  const comissao = profile?.comissao_porcentagem || 8.0;
   const vendedorKey = profile?.vendedor_key || 'luciano';
 
   // Contagem de rações ativas
@@ -136,14 +136,11 @@ export const SellerView: React.FC<SellerViewProps> = ({
             {/* Box do Vendedor */}
             <div className="bg-white/10 backdrop-blur-md rounded-xl p-2.5 sm:p-3 border border-white/20 shrink-0">
               <span className="text-[10px] text-emerald-200 block uppercase font-medium">
-                Tabela Ativa
+                Tabela do Consultor
               </span>
               <div className="flex items-baseline gap-1">
-                <span className="text-xl sm:text-2xl font-black text-white">
-                  {formatPercent(comissao)}
-                </span>
-                <span className="text-[11px] text-emerald-200">
-                  ({vendedorKey ? vendedorKey.toUpperCase() : 'BALCÃO'})
+                <span className="text-base sm:text-lg font-black text-white uppercase">
+                  {vendedorKey ? vendedorKey.toUpperCase() : 'BALCÃO'}
                 </span>
               </div>
             </div>
@@ -168,6 +165,11 @@ export const SellerView: React.FC<SellerViewProps> = ({
         {/* Efeito decorativo de fundo */}
         <div className="absolute -right-8 -bottom-8 w-36 h-36 bg-white/5 rounded-full pointer-events-none" />
       </div>
+
+      {/* BARRA DE PREÇOS PRATICADOS PELO VENDEDOR */}
+      {secaoAtiva === 'racoes' && (
+        <SellerPricingToolbar />
+      )}
 
       {/* ÁREA SUPERIOR FIXA: Campo de Busca (Web e Mobile) e Seletor Rações/Insumos */}
       <div className="sticky top-[53px] sm:top-[61px] z-30 bg-slate-100/95 backdrop-blur-md py-2 -mx-2 px-2 sm:-mx-3 sm:px-3 space-y-2.5 border-b border-slate-200/80 shadow-2xs">
@@ -251,14 +253,14 @@ export const SellerView: React.FC<SellerViewProps> = ({
               }}
               className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-bold transition-all duration-150 ${
                 secaoAtiva === 'receitas'
-                  ? 'bg-white text-amber-800 shadow-xs scale-[1.01]'
+                  ? 'bg-white text-emerald-800 shadow-xs scale-[1.01]'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
               }`}
             >
-              <FlaskConical size={14} className={secaoAtiva === 'receitas' ? 'text-amber-700' : 'text-slate-500'} />
-              <span>Receitas (1t)</span>
+              <FlaskConical size={14} className={secaoAtiva === 'receitas' ? 'text-[#006837]' : 'text-slate-500'} />
+              <span>Ingredientes</span>
               <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
-                secaoAtiva === 'receitas' ? 'bg-amber-100 text-amber-800' : 'bg-slate-300/80 text-slate-700'
+                secaoAtiva === 'receitas' ? 'bg-emerald-100 text-[#006837]' : 'bg-slate-300/80 text-slate-700'
               }`}>
                 {initialFormulas.length}
               </span>
@@ -269,7 +271,7 @@ export const SellerView: React.FC<SellerViewProps> = ({
             <Filter size={13} className="text-slate-400" />
             <span>
               {secaoAtiva === 'receitas'
-                ? `${initialFormulas.length} Receitas & Fórmulas (1t)`
+                ? `${initialFormulas.length} Rações com Ingredientes Oficiais`
                 : secaoAtiva === 'insumos'
                 ? `${initialInsumos.length} Matérias-Primas`
                 : showFamilyGrid
@@ -342,7 +344,7 @@ export const SellerView: React.FC<SellerViewProps> = ({
 
       {/* ÁREA DE CONTEÚDO */}
       {secaoAtiva === 'receitas' ? (
-        <ReceitasView />
+        <ReceitasView produtos={produtos} />
       ) : secaoAtiva === 'insumos' ? (
         <MateriasPrimasTable />
       ) : loading && produtos.length === 0 ? (
@@ -376,7 +378,6 @@ export const SellerView: React.FC<SellerViewProps> = ({
               produto={produto}
               vendedorKey={vendedorKey}
               vendedorNome={profile?.full_name}
-              comissaoPorcentagem={comissao}
               onClick={() => setSelectedProduct(produto)}
             />
           ))}
@@ -407,7 +408,6 @@ export const SellerView: React.FC<SellerViewProps> = ({
         onClose={() => setSelectedProduct(null)}
         vendedorKey={vendedorKey}
         vendedorNome={profile?.full_name}
-        comissaoPorcentagem={comissao}
       />
     </div>
   );

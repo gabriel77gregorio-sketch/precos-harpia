@@ -1,30 +1,51 @@
 import React, { useState, useMemo } from 'react';
-import type { FormulaRacao, Insumo, FormulaItem, CustoExtra } from '../../types/formulacao';
+import type { FormulaRacao, Insumo, FormulaItem } from '../../types/formulacao';
+import type { Produto } from '../../types/database';
 import { initialFormulas } from '../../data/initialFormulas';
 import { initialInsumos } from '../../data/initialInsumos';
-import { formatCurrency, formatDateBR, getCategoriaBadgeStyle } from '../../lib/utils';
+import { formatDateBR, getCategoriaBadgeStyle } from '../../lib/utils';
 import {
-  FlaskConical,
   Calendar,
   Share2,
   FileDown,
-  StickyNote
+  Search,
+  X,
+  CheckCircle2,
+  Copy,
+  Check,
+  FileText,
+  ShieldCheck,
+  Tag,
+  Package,
+  Layers,
+  Sparkles
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import harpiaLogoUrl from '../../assets/logo-harpia.jpg';
 
+interface IngredienteInfo {
+  insumoId: string;
+  nome: string;
+  categoria: string;
+}
+
 interface ReceitasViewProps {
   insumos?: Insumo[];
   formulas?: FormulaRacao[];
+  produtos?: Produto[];
   onUpdateFormulas?: (formulas: FormulaRacao[]) => void;
   readOnly?: boolean;
 }
 
 export const ReceitasView: React.FC<ReceitasViewProps> = ({
   insumos: propsInsumos,
-  formulas: propsFormulas
+  formulas: propsFormulas,
+  produtos: propsProdutos
 }) => {
+  const [copiedComposicao, setCopiedComposicao] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+
   const insumos = useMemo(() => {
     if (propsInsumos && propsInsumos.length > 0) return propsInsumos;
     try {
@@ -66,106 +87,89 @@ export const ReceitasView: React.FC<ReceitasViewProps> = ({
     formulas[0]?.id || 'formula-harpig-inicial-1047'
   );
 
-  // Multiplicador da batida para fábrica (padrão 1 tonelada = 1x)
-  const [multiplicadorBatida, setMultiplicadorBatida] = useState<number>(1);
+  // Filtragem das fórmulas pela barra de pesquisa
+  const filteredFormulas = useMemo(() => {
+    const term = searchTerm.toLowerCase().trim();
+    if (!term) return formulas;
+    return formulas.filter(f =>
+      f.produto_nome.toLowerCase().includes(term) ||
+      (f.codigo && f.codigo.toLowerCase().includes(term))
+    );
+  }, [formulas, searchTerm]);
 
   const activeFormula = useMemo(() => {
     return formulas.find(f => f.id === selectedFormulaId) || formulas[0];
   }, [formulas, selectedFormulaId]);
 
-  // Cálculos da receita ativa
-  const calculos = useMemo(() => {
-    if (!activeFormula) {
-      return {
-        itensDetalhados: [],
-        totalKgFormula: 0,
-        custoInsumosTon: 0,
-        custoOperacionalTon: 100,
-        custoTotalTon: 0,
-        pesoSaco: 40,
-        sacosPorTon: 25,
-        custoSaco: 0,
-        totalKgBatida: 1000,
-        totalSacosBatida: 25,
-        custoTotalBatida: 0
-      };
-    }
-
-    const pesoSaco = activeFormula.peso_saco_kg || 40;
-    const sacosPorTon = 1000 / pesoSaco; // 25 sacos
-
-    // Custo Operacional (P.S/SAC)
-    const custoOperacionalTon =
-      activeFormula.custos_extras?.reduce((sum: number, c: CustoExtra) => {
-        if (c.tipo === 'fixo') return sum + c.valor;
-        return sum;
-      }, 0) || 100.00;
-
-    let totalKgFormula = 0;
-    let custoInsumosTon = 0;
-
-    const itensDetalhados = activeFormula.itens.map((item: FormulaItem) => {
+  // Lista pura de ingredientes (matérias-primas presentes, SEM quantidades e SEM custos)
+  const ingredientesList = useMemo<IngredienteInfo[]>(() => {
+    if (!activeFormula) return [];
+    return activeFormula.itens.map((item: FormulaItem): IngredienteInfo => {
       const insumo = insumos.find(i => i.id === item.insumo_id);
-      const precoKg = insumo?.preco_kg ?? (insumo ? insumo.preco_tonelada / 1000 : 0);
-      const custoMistura = item.quantidade_kg * precoKg;
-
-      totalKgFormula += item.quantidade_kg;
-      custoInsumosTon += custoMistura;
-
       return {
-        ...item,
-        insumoNome: insumo?.nome || 'Insumo',
-        categoria: insumo?.categoria || 'MACRO',
-        precoKg,
-        custoMistura,
-        // Projeção para a batida selecionada
-        kgBatida: item.quantidade_kg * multiplicadorBatida,
-        custoBatida: custoMistura * multiplicadorBatida
+        insumoId: item.insumo_id,
+        nome: insumo?.nome || 'Ingrediente Harpia',
+        categoria: insumo?.categoria || 'MACRO'
       };
     });
+  }, [activeFormula, insumos]);
 
-    const custoTotalTon = custoInsumosTon + custoOperacionalTon;
-    const custoSaco = custoTotalTon / sacosPorTon;
+  // Texto corrido da composição qualitativa (padrão de rótulo e bula)
+  const textoComposicaoQualitativa = useMemo(() => {
+    if (ingredientesList.length === 0) return '';
+    return ingredientesList.map((i: IngredienteInfo) => i.nome).join(', ') + '.';
+  }, [ingredientesList]);
 
-    return {
-      itensDetalhados,
-      totalKgFormula,
-      custoInsumosTon,
-      custoOperacionalTon,
-      custoTotalTon,
-      pesoSaco,
-      sacosPorTon,
-      custoSaco,
-      totalKgBatida: totalKgFormula * multiplicadorBatida,
-      totalSacosBatida: sacosPorTon * multiplicadorBatida,
-      custoTotalBatida: custoTotalTon * multiplicadorBatida
-    };
-  }, [activeFormula, insumos, multiplicadorBatida]);
+  // Produto do catálogo oficial associado a esta fórmula (para obter indicações e consumo)
+  const produtoAssociado = useMemo(() => {
+    if (!activeFormula || !propsProdutos) return null;
+    return propsProdutos.find(p =>
+      (activeFormula.produto_id && p.id === activeFormula.produto_id) ||
+      activeFormula.produto_nome.toLowerCase().includes(p.nome.toLowerCase()) ||
+      p.nome.toLowerCase().includes(activeFormula.produto_nome.toLowerCase().split('(')[0].trim())
+    );
+  }, [activeFormula, propsProdutos]);
 
-  const handleShare = () => {
-    if (!activeFormula) return;
-    const header = `*RECEITA / FÓRMULA OFICIAL HARPIA*\n*${activeFormula.produto_nome}*\n_Batida Padrão: 1 Tonelada (1.000 kg) | Atualizado em: ${formatDateBR(activeFormula.updated_at)}_\n\n`;
-    const linhas = calculos.itensDetalhados
-      .map(
-        (it: any) =>
-          `• *${it.insumoNome}*: ${it.quantidade_kg.toLocaleString('pt-BR')} kg (${formatCurrency(it.precoKg)}/kg) = ${formatCurrency(it.custoMistura)}`
-      )
-      .join('\n');
+  const pesoSaco = activeFormula?.peso_saco_kg || produtoAssociado?.peso_unitario || 40;
 
-    const totais = `\n\n📊 *RESUMO DE CUSTOS:*\n• *Total Batida:* ${calculos.totalKgFormula.toLocaleString('pt-BR')} kg\n• *Custo TON (Insumos):* ${formatCurrency(calculos.custoInsumosTon)}\n• *P.S/SAC (Custo Operacional):* ${formatCurrency(calculos.custoOperacionalTon)}\n• *Custo por Saco (${calculos.pesoSaco}kg):* ${formatCurrency(calculos.custoSaco)}`;
-
-    const notas = activeFormula.notas ? `\n\n📝 *OBSERVAÇÕES:*\n${activeFormula.notas}` : '';
-
-    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(header + linhas + totais + notas)}`, '_blank');
+  // Copiar Composição Qualitativa para o Clipboard
+  const handleCopyComposicao = () => {
+    if (!textoComposicaoQualitativa) return;
+    navigator.clipboard.writeText(textoComposicaoQualitativa);
+    setCopiedComposicao(true);
+    setTimeout(() => setCopiedComposicao(false), 2500);
   };
 
+  // Compartilhar Ficha Técnica via WhatsApp (Somente ingredientes, indicações e embalagem - ZERO custos)
+  const handleShare = () => {
+    if (!activeFormula) return;
+    const header = `*HARPIA NUTRIÇÃO ANIMAL*\n*FICHA TÉCNICA COMERCIAL*\n*${activeFormula.produto_nome}*\n_Embalagem: Saco de ${pesoSaco} kg | Atualizado em: ${formatDateBR(activeFormula.updated_at)}_\n\n`;
+
+    const composicao = `🌿 *COMPOSIÇÃO QUALITATIVA (INGREDIENTES):*\n${textoComposicaoQualitativa}\n\n`;
+
+    const indicacoes = produtoAssociado?.indicacoes
+      ? `📌 *INDICAÇÃO DE USO:*\n${produtoAssociado.indicacoes}\n\n`
+      : '';
+
+    const consumo = produtoAssociado?.consumo_recomendado
+      ? `⚖ *CONSUMO RECOMENDADO / MODO DE USAR:*\n${produtoAssociado.consumo_recomendado}\n\n`
+      : '';
+
+    const obs = activeFormula.notas ? `📝 *INFORMAÇÕES ADICIONAIS:*\n${activeFormula.notas}\n\n` : '';
+
+    const rodape = `📞 _Consulte seu representante Harpia para disponibilidade e pedidos._`;
+
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(header + composicao + indicacoes + consumo + obs + rodape)}`, '_blank');
+  };
+
+  // Baixar Ficha Técnica Comercial em PDF (Sem custos e sem quantidades em kg)
   const handleDownloadPdf = async () => {
     if (!activeFormula) return;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
 
-    // Logo
+    // Logotipo Harpia
     try {
       const response = await fetch(harpiaLogoUrl);
       const blob = await response.blob();
@@ -175,147 +179,169 @@ export const ReceitasView: React.FC<ReceitasViewProps> = ({
         reader.readAsDataURL(blob);
       });
       doc.addImage(base64, 'JPEG', 14, 6.5, 45, 18.6);
-    } catch { /* logo opcional */ }
+    } catch {
+      // logo opcional se offline
+    }
 
-    doc.setFontSize(16);
+    doc.setFontSize(15);
     doc.setFont('helvetica', 'bold');
-    doc.text('FÓRMULA DE RAÇÃO', pageW / 2, 18, { align: 'center' });
+    doc.setTextColor(0, 104, 55);
+    doc.text('FICHA TÉCNICA E COMPOSIÇÃO', pageW / 2, 16, { align: 'center' });
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100);
-    doc.text('DOCUMENTO CONFIDENCIAL - USO INTERNO HARPIA', pageW / 2, 24, { align: 'center' });
+    doc.text('HARPIA NUTRIÇÃO ANIMAL - INFORMAÇÕES TÉCNICAS DO PRODUTO', pageW / 2, 22, { align: 'center' });
     doc.setTextColor(0);
 
     doc.setDrawColor(0, 104, 55);
     doc.setLineWidth(0.8);
-    doc.line(14, 28, pageW - 14, 28);
+    doc.line(14, 27, pageW - 14, 27);
 
-    doc.setFontSize(13);
+    // Título do Produto
+    doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
+    doc.setTextColor(20, 20, 20);
     doc.text(activeFormula.produto_nome, 14, 35);
+
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Batida Padrão: 1 Tonelada (1.000 kg) | Saco ${calculos.pesoSaco}kg (${calculos.sacosPorTon.toFixed(0)} sacos/ton)`, 14, 41);
+    doc.setTextColor(80);
+    doc.text(`Apresentação: Saco de ${pesoSaco} kg`, 14, 41);
     const dataStr = new Date().toLocaleDateString('pt-BR');
-    doc.text(`Data: ${dataStr}`, pageW - 14, 41, { align: 'right' });
+    doc.text(`Emissão: ${dataStr}`, pageW - 14, 41, { align: 'right' });
 
-    const rows = calculos.itensDetalhados.map((item: any) => [
-      item.insumoNome,
-      `R$ ${item.precoKg.toFixed(4)}`,
-      `${item.quantidade_kg.toFixed(1)}`,
-      `R$ ${item.custoMistura.toFixed(2)}`
+    // Tabela com apenas os ingredientes da ração (Sem KG e Sem R$)
+    const rows = ingredientesList.map((item: IngredienteInfo, idx: number) => [
+      String(idx + 1),
+      item.nome,
+      item.categoria
     ]);
 
     autoTable(doc, {
-      startY: 45,
-      head: [['Matéria Prima', 'KG/MP', 'Fórmula KG', 'Custo Fórmula']],
+      startY: 46,
+      head: [['#', 'Ingrediente / Matéria-Prima', 'Classificação']],
       body: rows,
-      foot: [[
-        { content: 'Total Formula KG/Custo', colSpan: 2, styles: { fontStyle: 'bold', halign: 'left' as const } },
-        { content: `${calculos.totalKgFormula.toFixed(1)}`, styles: { fontStyle: 'bold', halign: 'right' as const } },
-        { content: `R$ ${calculos.custoInsumosTon.toFixed(2)}`, styles: { fontStyle: 'bold', halign: 'right' as const } }
-      ]],
-      styles: { fontSize: 8, cellPadding: 2.5 },
-      headStyles: { fillColor: [0, 104, 55], textColor: 255, fontStyle: 'bold', halign: 'center' },
-      footStyles: { fillColor: [247, 185, 139], textColor: [20, 20, 20], fontStyle: 'bold' },
+      styles: { fontSize: 8.5, cellPadding: 2.8 },
+      headStyles: { fillColor: [0, 104, 55], textColor: 255, fontStyle: 'bold', halign: 'left' },
       columnStyles: {
-        0: { halign: 'left', cellWidth: 70 },
-        1: { halign: 'right', cellWidth: 30 },
-        2: { halign: 'right', cellWidth: 30 },
-        3: { halign: 'right', cellWidth: 35 }
+        0: { halign: 'center', cellWidth: 12 },
+        1: { halign: 'left', cellWidth: 125 },
+        2: { halign: 'center', cellWidth: 45 }
       },
       theme: 'grid',
       margin: { left: 14, right: 14 }
     });
 
-    const finalY = (doc as any).lastAutoTable?.finalY || 160;
-    let cursorY = finalY + 6;
+    const finalY = (doc as any).lastAutoTable?.finalY || 130;
+    let cursorY = finalY + 8;
 
-    doc.setFillColor(252, 219, 199);
-    doc.roundedRect(14, cursorY, pageW - 28, 32, 3, 3, 'F');
+    // Caixa de Composição Qualitativa contínua
+    doc.setFillColor(245, 247, 246);
+    doc.setDrawColor(200, 220, 210);
+    doc.roundedRect(14, cursorY, pageW - 28, 28, 2, 2, 'FD');
+
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.setTextColor(60);
-    doc.text('Custo TON (Insumos):', 20, cursorY + 8);
-    doc.text(`R$ ${calculos.custoInsumosTon.toFixed(2)}`, pageW - 20, cursorY + 8, { align: 'right' });
-    doc.text('P.S/SAC (Operacional):', 20, cursorY + 16);
-    doc.text(`R$ ${calculos.custoOperacionalTon.toFixed(2)}`, pageW - 20, cursorY + 16, { align: 'right' });
-    doc.setFontSize(11);
+    doc.setFontSize(8.5);
     doc.setTextColor(0, 104, 55);
-    doc.text(`Custo/SC (${calculos.pesoSaco}kg):`, 20, cursorY + 26);
-    doc.text(`R$ ${calculos.custoSaco.toFixed(2)}`, pageW - 20, cursorY + 26, { align: 'right' });
-    doc.setTextColor(0);
-    cursorY += 38;
+    doc.text('COMPOSIÇÃO QUALITATIVA (RÓTULO):', 18, cursorY + 6);
 
-    if (activeFormula.notas) {
-      doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(40);
+    const composicaoLines = doc.splitTextToSize(textoComposicaoQualitativa, pageW - 36);
+    doc.text(composicaoLines, 18, cursorY + 12);
+
+    cursorY += 34;
+
+    // Indicações de Uso e Consumo
+    if (produtoAssociado?.indicacoes || activeFormula.notas) {
       doc.setFont('helvetica', 'bold');
-      doc.text('OBSERVAÇÕES:', 14, cursorY);
+      doc.setFontSize(9);
+      doc.setTextColor(0, 104, 55);
+      doc.text('INDICAÇÃO DE USO:', 14, cursorY);
       cursorY += 5;
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      const lines = doc.splitTextToSize(activeFormula.notas, pageW - 28);
-      doc.text(lines, 14, cursorY);
+      doc.setFontSize(8.5);
+      doc.setTextColor(50);
+      const indLines = doc.splitTextToSize(
+        produtoAssociado?.indicacoes || activeFormula.notas || '',
+        pageW - 28
+      );
+      doc.text(indLines, 14, cursorY);
+      cursorY += indLines.length * 4.5 + 4;
     }
 
+    if (produtoAssociado?.consumo_recomendado) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(0, 104, 55);
+      doc.text('MODO DE USAR / CONSUMO RECOMENDADO:', 14, cursorY);
+      cursorY += 5;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(50);
+      const consLines = doc.splitTextToSize(produtoAssociado.consumo_recomendado, pageW - 28);
+      doc.text(consLines, 14, cursorY);
+    }
+
+    // Rodapé de segurança e autenticidade
     const totalPages = doc.getNumberOfPages();
     for (let i = 1; i <= totalPages; i++) {
       doc.setPage(i);
-      doc.setDrawColor(200, 200, 200);
+      doc.setDrawColor(220, 220, 220);
       doc.setLineWidth(0.3);
-      doc.line(14, pageH - 18, pageW - 14, pageH - 18);
+      doc.line(14, pageH - 16, pageW - 14, pageH - 16);
       doc.setFontSize(7);
       doc.setFont('helvetica', 'bold');
-      doc.setTextColor(180, 0, 0);
-      doc.text('⚠ DOCUMENTO CONFIDENCIAL - PROPRIEDADE HARPIA NUTRIÇÃO ANIMAL', pageW / 2, pageH - 13, { align: 'center' });
+      doc.setTextColor(0, 104, 55);
+      doc.text('Harpia Nutrição Animal • Ficha Informativa Comercial', pageW / 2, pageH - 11, { align: 'center' });
       doc.setFontSize(6.5);
       doc.setTextColor(120);
       doc.setFont('helvetica', 'normal');
-      doc.text('Este documento contém informações estratégicas e proprietárias. Reprodução, distribuição ou divulgação não autorizada é proibida.', pageW / 2, pageH - 9, { align: 'center' });
-      doc.text(`Gerado em ${dataStr} | Harpia Nutrição Animal`, pageW / 2, pageH - 5, { align: 'center' });
-      doc.setTextColor(0);
+      doc.text(`Documento gerado em ${dataStr} para orientação e atendimento ao cliente.`, pageW / 2, pageH - 7, { align: 'center' });
     }
 
-    const nomeArquivo = `Formula_${activeFormula.produto_nome.replace(/[^a-zA-Z0-9]/g, '_')}_${dataStr.replace(/\//g, '-')}.pdf`;
+    const nomeArquivo = `Ficha_Ingredientes_${activeFormula.produto_nome.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
     doc.save(nomeArquivo);
   };
 
   return (
     <div className="space-y-4">
-      {/* Seletor de Receita no topo */}
+      {/* Seletor de Receita & Barra de Pesquisa */}
       <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <span className="bg-amber-100 text-amber-900 border border-amber-200 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
-                Ficha Técnica de Produção
+              <span className="bg-emerald-100 text-[#006837] border border-emerald-200 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                <ShieldCheck size={12} />
+                Composição Qualitativa Oficial
               </span>
               <span className="text-xs text-slate-500 flex items-center gap-1">
                 <Calendar size={13} className="text-slate-400" />
-                {formatDateBR(activeFormula?.updated_at)}
+                Atualizado: {formatDateBR(activeFormula?.updated_at)}
               </span>
             </div>
             <h2 className="text-base sm:text-lg font-black text-slate-900 mt-1">
-              Receitas e Fórmulas de Ração
+              Ingredientes e Fórmulas das Rações
             </h2>
             <p className="text-xs text-slate-500">
-              Kilos usados por batida de 1t, custo de cada matéria-prima, custo operacional (P.S/SAC) e custo por saco.
+              Consulte as matérias-primas e a composição oficial de cada produto Harpia para sanar dúvidas de produtores e clientes.
             </p>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={handleDownloadPdf}
-              className="inline-flex items-center gap-1.5 bg-red-50 hover:bg-red-100 active:scale-95 text-red-600 px-3 py-2 rounded-xl text-xs font-bold transition shadow-xs border border-red-200"
-              title="Baixar PDF da fórmula"
+              className="inline-flex items-center gap-1.5 bg-red-50 hover:bg-red-100 active:scale-95 text-red-700 px-3 py-2 rounded-xl text-xs font-bold transition shadow-xs border border-red-200"
+              title="Baixar Ficha Técnica em PDF"
             >
               <FileDown size={14} />
-              <span>PDF</span>
+              <span>PDF Ficha</span>
             </button>
             <button
               onClick={handleShare}
               className="inline-flex items-center gap-1.5 bg-[#006837] hover:bg-[#00522c] active:scale-95 text-white px-3 py-2 rounded-xl text-xs font-bold transition shadow-xs"
-              title="Compartilhar fórmula no WhatsApp"
+              title="Compartilhar Ingredientes no WhatsApp"
             >
               <Share2 size={14} />
               <span>Compartilhar</span>
@@ -323,218 +349,222 @@ export const ReceitasView: React.FC<ReceitasViewProps> = ({
           </div>
         </div>
 
-        {/* Abas das Fórmulas — Grid 3 colunas */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 pt-1 max-h-[380px] overflow-y-auto pr-1">
-          {formulas.map(formula => {
-            const isSelected = formula.id === selectedFormulaId;
-            return (
+        {/* Barra de Pesquisa de Fórmulas */}
+        <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="relative flex-1">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Buscar ração por nome (ex: Harpig, Harmilk, Lac 22) ou código..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-[#006837] focus:bg-white transition"
+            />
+            {searchTerm && (
               <button
-                key={formula.id}
-                onClick={() => {
-                  setSelectedFormulaId(formula.id);
-                  setMultiplicadorBatida(1);
-                }}
-                title={formula.produto_nome}
-                className={`p-2.5 rounded-xl text-xs font-bold transition flex items-start gap-2 border text-left ${
-                  isSelected
-                    ? 'bg-amber-600 text-white border-amber-700 shadow-xs'
-                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
-                }`}
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-md"
+                title="Limpar busca"
               >
-                <FlaskConical size={15} className={`shrink-0 mt-0.5 ${isSelected ? 'text-amber-100' : 'text-slate-400'}`} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-1.5">
-                    <span className="leading-snug line-clamp-2">{formula.produto_nome}</span>
-                    {formula.codigo && (
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-mono shrink-0 ${
-                        isSelected ? 'bg-black/25 text-white' : 'bg-slate-200 text-slate-700'
-                      }`}>
-                        #{formula.codigo}
-                      </span>
-                    )}
-                  </div>
-                </div>
+                <X size={14} />
               </button>
-            );
-          })}
+            )}
+          </div>
+
+          <span className="text-[11px] font-semibold text-slate-500 shrink-0 self-end sm:self-center">
+            {filteredFormulas.length === formulas.length
+              ? `${formulas.length} rações cadastradas`
+              : `${filteredFormulas.length} de ${formulas.length} rações encontradas`}
+          </span>
         </div>
+
+        {/* Grade de Botões das Fórmulas */}
+        {filteredFormulas.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 pt-1 max-h-[340px] overflow-y-auto pr-1">
+            {filteredFormulas.map(formula => {
+              const isSelected = formula.id === selectedFormulaId;
+              return (
+                <button
+                  key={formula.id}
+                  onClick={() => setSelectedFormulaId(formula.id)}
+                  title={formula.produto_nome}
+                  className={`p-2.5 rounded-xl text-xs font-bold transition flex items-start gap-2 border text-left ${
+                    isSelected
+                      ? 'bg-[#006837] text-white border-[#004e29] shadow-xs'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
+                  }`}
+                >
+                  <FileText size={15} className={`shrink-0 mt-0.5 ${isSelected ? 'text-emerald-200' : 'text-slate-400'}`} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-1.5">
+                      <span className="leading-snug line-clamp-2">{formula.produto_nome}</span>
+                      {formula.codigo && (
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-mono shrink-0 ${
+                          isSelected ? 'bg-black/25 text-white' : 'bg-slate-200 text-slate-700'
+                        }`}>
+                          #{formula.codigo}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="p-6 text-center bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-500 space-y-2">
+            <p>Nenhuma ração encontrada para "<strong>{searchTerm}</strong>".</p>
+            <button
+              onClick={() => setSearchTerm('')}
+              className="text-[#006837] font-bold hover:underline"
+            >
+              Limpar filtro de busca
+            </button>
+          </div>
+        )}
       </div>
 
       {activeFormula && (
-        <div className="bg-white rounded-2xl border border-slate-300 shadow-md overflow-hidden">
-          {/* Cabeçalho da Planilha idêntico ao modelo físico oficial */}
-          <div className="bg-[#f7b98b] px-4 py-3 border-b-2 border-slate-700/60 text-center">
-            <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-wide uppercase">
-              {activeFormula.produto_nome}
-            </h3>
-            <span className="text-[11px] font-bold text-slate-800">
-              Batida Padrão: 1 Tonelada (1.000 kg) • Saco {calculos.pesoSaco} kg ({calculos.sacosPorTon} sacos/ton)
-            </span>
-          </div>
-
-          {/* TABELA DE MATÉRIAS-PRIMAS DA RECEITA */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs sm:text-sm border-collapse">
-              <thead>
-                <tr className="bg-white border-b-2 border-slate-800 font-bold text-slate-900 text-xs sm:text-sm">
-                  <th className="px-4 py-2.5 border-r border-slate-300">Matéria Prima</th>
-                  <th className="px-3 py-2.5 text-right border-r border-slate-300 w-28 sm:w-32">KG/MP</th>
-                  <th className="px-3 py-2.5 text-right border-r border-slate-300 w-28 sm:w-32">Fórmula KG</th>
-                  <th className="px-4 py-2.5 text-right w-36 sm:w-40">Custo Formula</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-300">
-                {calculos.itensDetalhados.map((item: any, idx: number) => {
-                  const badge = getCategoriaBadgeStyle(item.categoria);
-                  return (
-                    <tr
-                      key={item.insumo_id || idx}
-                      className="hover:bg-amber-50/40 transition-colors"
-                    >
-                      {/* Matéria Prima */}
-                      <td className="px-4 py-2.5 font-semibold text-slate-900 border-r border-slate-300">
-                        <div className="flex items-center justify-between gap-2">
-                          <span>{item.insumoNome}</span>
-                          <span className={`text-[9px] font-black uppercase px-1.5 py-0.2 rounded border ${badge.bg} ${badge.text} ${badge.border}`}>
-                            {item.categoria}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* KG/MP (Preço por kg da MP) */}
-                      <td className="px-3 py-2.5 text-right text-slate-700 font-mono font-medium border-r border-slate-300 whitespace-nowrap">
-                        {formatCurrency(item.precoKg)}
-                      </td>
-
-                      {/* Fórmula KG (Kilos usados por batida de 1t) */}
-                      <td className="px-3 py-2.5 text-right font-black text-slate-900 font-mono border-r border-slate-300 whitespace-nowrap">
-                        {item.quantidade_kg.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-                      </td>
-
-                      {/* Custo Formula (Preço * Kilos) */}
-                      <td className="px-4 py-2.5 text-right font-black text-slate-950 font-mono whitespace-nowrap">
-                        {formatCurrency(item.custoMistura)}
-                      </td>
-                    </tr>
-                  );
-                })}
-
-                {/* LINHA: Total Formula KG/Custo */}
-                <tr className="bg-[#f9d7c3] font-bold text-slate-900 border-t-2 border-b border-slate-800 text-xs sm:text-sm">
-                  <td className="px-4 py-2.5 border-r border-slate-300 font-black" colSpan={2}>
-                    Total Formula KG/Custo
-                  </td>
-                  <td className="px-3 py-2.5 text-right font-black font-mono border-r border-slate-300">
-                    {calculos.totalKgFormula.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-black font-mono text-slate-950 text-sm sm:text-base">
-                    {formatCurrency(calculos.custoInsumosTon)}
-                  </td>
-                </tr>
-
-                {/* LINHA: Custo TON */}
-                <tr className="bg-[#fcdbc7] font-bold text-slate-900 border-b border-slate-400">
-                  <td className="px-4 py-2.5 text-right border-r border-slate-300 font-black uppercase" colSpan={2}>
-                    Custo TON
-                  </td>
-                  <td className="px-3 py-2.5 text-right border-r border-slate-300 font-black font-mono">
-                    R$
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-black font-mono text-slate-950 text-sm sm:text-base">
-                    {formatCurrency(calculos.custoInsumosTon).replace('R$', '').trim()}
-                  </td>
-                </tr>
-
-                {/* LINHA: P.S/SAC (Custo Operacional Produção + Saco) */}
-                <tr className="bg-[#fcdbc7] font-bold text-slate-900 border-b border-slate-400">
-                  <td className="px-4 py-2.5 text-right border-r border-slate-300 font-black uppercase" colSpan={2}>
-                    P.S/SAC
-                  </td>
-                  <td className="px-3 py-2.5 text-right border-r border-slate-300 font-black font-mono">
-                    R$
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-black font-mono text-slate-950 text-sm sm:text-base">
-                    {formatCurrency(calculos.custoOperacionalTon).replace('R$', '').trim()}
-                  </td>
-                </tr>
-
-                {/* LINHA: Custo/SC (Custo por Saco de 40kg) */}
-                <tr className="bg-[#f7b98b] font-black text-slate-950 border-t-2 border-slate-800 text-sm sm:text-base">
-                  <td className="px-4 py-3 text-right border-r border-slate-400 uppercase" colSpan={2}>
-                    Custo/SC ({calculos.pesoSaco}kg)
-                  </td>
-                  <td className="px-3 py-3 text-right border-r border-slate-400 font-mono">
-                    R$
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono text-[#006837] text-base sm:text-lg">
-                    {formatCurrency(calculos.custoSaco).replace('R$', '').trim()}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          {/* SIMULADOR DE BATIDA PARA FÁBRICA / MISTURADOR */}
-          <div className="bg-slate-50 p-4 border-t border-slate-300 space-y-2.5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <span className="text-xs font-black text-slate-800 block">
-                  Simulador de Batida no Misturador:
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden space-y-5 p-4 sm:p-6">
+          {/* Cabeçalho do Produto Ativo */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+            <div>
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <span className="text-xs font-black uppercase tracking-wider px-2.5 py-0.5 rounded-md bg-emerald-50 text-[#006837] border border-emerald-200">
+                  {produtoAssociado?.categoria?.nome || 'Ração Balanceada Harpia'}
                 </span>
-                <span className="text-[11px] text-slate-500">
-                  Escolha o volume a ser batido para ver a pesagem exata de cada ingrediente:
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1">
+                  <Package size={13} className="text-slate-500" />
+                  Saco de {pesoSaco} kg
                 </span>
+                {activeFormula.codigo && (
+                  <span className="text-[11px] font-mono text-slate-500 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+                    Código #{activeFormula.codigo}
+                  </span>
+                )}
               </div>
+              <h3 className="text-lg sm:text-xl font-black text-slate-900">
+                {activeFormula.produto_nome}
+              </h3>
+            </div>
 
-              {/* Botões de Batida */}
-              <div className="flex items-center gap-1.5">
-                {[0.5, 1, 2, 3, 5].map(ton => (
-                  <button
-                    key={ton}
-                    onClick={() => setMultiplicadorBatida(ton)}
-                    className={`px-2.5 py-1 text-xs font-bold rounded-lg transition border ${
-                      multiplicadorBatida === ton
-                        ? 'bg-[#006837] text-white border-[#006837] shadow-xs'
-                        : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                    }`}
-                  >
-                    {ton === 1 ? '1 Ton (Padrão)' : `${ton} Ton`}
-                  </button>
-                ))}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 flex items-center gap-1.5">
+                <Layers size={14} className="text-[#006837]" />
+                {ingredientesList.length} ingredientes na composição
+              </span>
+            </div>
+          </div>
+
+          {/* SEÇÃO 1: LISTA DOS INGREDIENTES DA RAÇÃO (SEM CUSTOS E SEM QUANTIDADES) */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                  <Sparkles size={16} className="text-amber-500" />
+                  Ingredientes Utilizados (Composição Qualitativa)
+                </h4>
+                <p className="text-xs text-slate-500">
+                  Matérias-primas e fontes nutricionais aprovadas presentes nesta ração:
+                </p>
               </div>
             </div>
 
-            {multiplicadorBatida !== 1 && (
-              <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-200 flex flex-wrap items-center justify-between gap-2 text-xs">
-                <div>
-                  <span className="font-bold text-emerald-950 block">
-                    Batida de {multiplicadorBatida} Toneladas ({(multiplicadorBatida * 1000).toLocaleString('pt-BR')} kg):
-                  </span>
-                  <span className="text-emerald-700">
-                    Rendimento: <strong>{calculos.totalSacosBatida} sacos</strong> de {calculos.pesoSaco}kg
-                  </span>
-                </div>
-                <div className="text-right">
-                  <span className="text-[11px] text-emerald-700 block">Custo Total da Batida</span>
-                  <span className="text-base font-black text-emerald-900">
-                    {formatCurrency(calculos.custoTotalBatida)}
-                  </span>
-                </div>
-              </div>
-            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              {ingredientesList.map((item: IngredienteInfo, index: number) => {
+                const badge = getCategoriaBadgeStyle(item.categoria);
+                return (
+                  <div
+                    key={item.insumoId || index}
+                    className="p-3 rounded-xl bg-slate-50 hover:bg-emerald-50/40 border border-slate-200 transition flex items-center justify-between gap-2"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-6 h-6 rounded-lg bg-emerald-100 text-[#006837] flex items-center justify-center shrink-0">
+                        <CheckCircle2 size={14} />
+                      </div>
+                      <span className="text-xs font-bold text-slate-800 truncate" title={item.nome}>
+                        {item.nome}
+                      </span>
+                    </div>
 
-            {/* Observações da fórmula */}
+                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border shrink-0 ${badge.bg} ${badge.text} ${badge.border}`}>
+                      {item.categoria}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* SEÇÃO 2: BOX DE TEXTO OFICIAL DA COMPOSIÇÃO QUALITATIVA (PADRÃO MAPA / RÓTULO) */}
+          <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-2xl p-4 space-y-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className="text-xs font-black uppercase tracking-wider text-[#006837] flex items-center gap-1.5">
+                <Tag size={14} />
+                Texto de Rótulo: Composição Qualitativa Completa
+              </span>
+              <button
+                type="button"
+                onClick={handleCopyComposicao}
+                className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg bg-white border border-emerald-300 text-[#006837] hover:bg-emerald-50 transition shadow-2xs"
+                title="Copiar texto para colar no WhatsApp ou proposta"
+              >
+                {copiedComposicao ? (
+                  <>
+                    <Check size={13} className="text-emerald-700" />
+                    <span>Copiado!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy size={13} />
+                    <span>Copiar Ingredientes</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-700 leading-relaxed font-medium bg-white/80 p-3 rounded-xl border border-emerald-100">
+              {textoComposicaoQualitativa}
+            </p>
+            <span className="text-[11px] text-slate-500 block">
+              💡 Texto formatado de acordo com as normas de rotulagem nutricional para apresentação direta ao produtor.
+            </span>
+          </div>
+
+          {/* SEÇÃO 3: INFORMAÇÕES DE USO E RÓTULO / ETIQUETA DO PRODUTO */}
+          <div className="space-y-3 pt-2 border-t border-slate-100">
+            <h4 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+              <FileText size={16} className="text-[#006837]" />
+              Especificações Técnicas e Rótulo
+            </h4>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+              {/* Indicação de Uso */}
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                <span className="font-bold text-slate-800 block text-[11px] uppercase tracking-wider">
+                  Indicação de Uso:
+                </span>
+                <p className="text-slate-600 leading-relaxed">
+                  {produtoAssociado?.indicacoes || 'Alimento balanceado formulado especificamente para suprir as exigências nutricionais da categoria animal.'}
+                </p>
+              </div>
+
+              {/* Modo de Usar / Consumo */}
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                <span className="font-bold text-slate-800 block text-[11px] uppercase tracking-wider">
+                  Modo de Usar / Consumo Recomendado:
+                </span>
+                <p className="text-slate-600 leading-relaxed">
+                  {produtoAssociado?.consumo_recomendado || 'Fornecer aos animais conforme prescrição do responsável técnico ou zootecnista Harpia.'}
+                </p>
+              </div>
+            </div>
+
+            {/* Observações da Fórmula */}
             {activeFormula.notas && (
-              <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-3 flex items-start gap-2.5">
-                <StickyNote size={15} className="text-amber-600 shrink-0 mt-0.5" />
-                <div className="min-w-0">
-                  <span className="text-[11px] font-black uppercase text-amber-900 block tracking-wider">
-                    Observações da Fórmula:
-                  </span>
-                  <p className="text-xs text-amber-950 mt-0.5 whitespace-pre-line leading-relaxed">
-                    {activeFormula.notas}
-                  </p>
-                </div>
+              <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl text-xs text-amber-900 leading-relaxed">
+                <strong className="block mb-0.5">Observações Técnicas:</strong>
+                {activeFormula.notas}
               </div>
             )}
           </div>

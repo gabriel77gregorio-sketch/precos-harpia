@@ -27,7 +27,7 @@ export const CartDrawer: React.FC = () => {
     totalItems,
     totalValor,
     totalPesoKg,
-    totalComissao,
+    totalLucro,
     isCartOpen,
     setIsCartOpen
   } = useCart();
@@ -46,11 +46,10 @@ export const CartDrawer: React.FC = () => {
 
     const dataHoje = new Date().toLocaleDateString('pt-BR');
     const consultorNome = profile?.full_name || 'Consultor Harpia';
-    const tabelaVendedor = profile?.vendedor_key ? profile.vendedor_key.toUpperCase() : 'BALCÃO';
 
     let msg = `*PEDIDO DE COMPRA - HARPIA NUTRIÇÃO ANIMAL* 🌱\n`;
     msg += `==================================\n`;
-    msg += `*Consultor:* ${consultorNome} (${tabelaVendedor})\n`;
+    msg += `*Consultor:* ${consultorNome}\n`;
     if (clienteNome.trim()) {
       msg += `*Cliente / Fazenda:* ${clienteNome.trim()}\n`;
     }
@@ -326,13 +325,13 @@ export const CartDrawer: React.FC = () => {
                 </span>
               </div>
 
-              {totalComissao > 0 && (
+              {totalLucro > 0 && (
                 <div className="text-right">
                   <span className="text-[10px] uppercase font-bold text-emerald-700 block">
-                    Comissão Estimada
+                    Seu Ganho Estimado
                   </span>
                   <span className="text-sm font-black text-[#006837]">
-                    +{formatCurrency(totalComissao)}
+                    +{formatCurrency(totalLucro)}
                   </span>
                 </div>
               )}

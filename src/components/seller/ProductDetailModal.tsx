@@ -1,12 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import type { Produto, VendedorKey } from '../../types/database';
 import {
   formatCurrency,
-  formatPercent,
-  getPrecoVendedor,
   getFamiliaColorConfig,
   getUnidadeLabel,
-  calculateCommission,
   shareOnWhatsApp
 } from '../../lib/utils';
 import {
@@ -17,10 +14,17 @@ import {
   Scale,
   Calculator,
   Info,
-  DollarSign,
-  ShoppingCart
+  ShoppingCart,
+  TrendingUp,
+  RotateCcw,
+  Check,
+  Edit3,
+  Sparkles
 } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
+import { useSellerPricing } from '../../context/SellerPricingContext';
+import { initialFormulas } from '../../data/initialFormulas';
+import { initialInsumos } from '../../data/initialInsumos';
 
 interface ProductDetailModalProps {
   produto: Produto | null;
@@ -28,7 +32,7 @@ interface ProductDetailModalProps {
   onClose: () => void;
   vendedorKey?: VendedorKey;
   vendedorNome?: string;
-  comissaoPorcentagem: number;
+  comissaoPorcentagem?: number;
 }
 
 export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
@@ -36,31 +40,92 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   isOpen,
   onClose,
   vendedorKey,
-  vendedorNome,
-  comissaoPorcentagem
+  vendedorNome
 }) => {
   const { addToCart, setIsCartOpen } = useCart();
+  const {
+    getPrecoCusto,
+    getPrecoPraticado,
+    isCustomPrice,
+    setCustomPrice,
+    removeCustomPrice
+  } = useSellerPricing();
+
   const [quantidade, setQuantidade] = useState<number>(20);
   const [addedFeedback, setAddedFeedback] = useState(false);
+  const [customPriceInput, setCustomPriceInput] = useState<string>('');
+  const [savedFeedback, setSavedFeedback] = useState(false);
+
+  useEffect(() => {
+    if (produto) {
+      setCustomPriceInput(getPrecoPraticado(produto).toFixed(2));
+    }
+  }, [produto, isOpen, getPrecoPraticado]);
 
   if (!isOpen || !produto) return null;
 
   const colorConfig = getFamiliaColorConfig(produto.familia || produto.categoria?.nome);
   const unidadeTexto = getUnidadeLabel(produto.unidade_tipo, produto.peso_unitario);
-  const precoAtivo = getPrecoVendedor(produto, vendedorKey);
-  const comissaoUnitaria = calculateCommission(precoAtivo, comissaoPorcentagem);
+  
+  const precoCusto = getPrecoCusto(produto);
+  const precoPraticado = getPrecoPraticado(produto);
+  const isIndividual = isCustomPrice(produto.id);
 
-  const totalVenda = precoAtivo * (quantidade || 0);
-  const totalComissao = comissaoUnitaria * (quantidade || 0);
+  const lucroUnitario = Math.max(0, precoPraticado - precoCusto);
+  const lucroPercent = precoCusto > 0 ? (lucroUnitario / precoCusto) * 100 : 0;
 
-  // Lista dos vendedores e seus preços na tabela oficial
-  const vendedoresTabela: Array<{ key: VendedorKey; label: string; desc: string }> = [
-    { key: 'balcao', label: 'Balcão', desc: 'Tabela Cheia' },
-    { key: 'loja', label: 'Loja Harpia', desc: 'Desconto 12%' },
-    { key: 'luciano', label: 'Luciano', desc: 'Desconto 8%' },
-    { key: 'wendel', label: 'Wendel', desc: 'Desconto 6%' },
-    { key: 'harpia', label: 'Harpia', desc: 'Desconto 4%' }
-  ];
+  // Busca lista de ingredientes oficiais (apenas nomes, sem custos nem pesos)
+  const ingredientes = useMemo(() => {
+    if (!produto) return [];
+    try {
+      let formulas = initialFormulas;
+      const cached = localStorage.getItem('harpia_formulas_v2');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) formulas = parsed;
+      }
+      const match = formulas.find(
+        (f) =>
+          f.produto_id === produto.id ||
+          f.produto_nome.toLowerCase().includes(produto.nome.toLowerCase()) ||
+          produto.nome.toLowerCase().includes(f.produto_nome.toLowerCase().split('(')[0].trim())
+      );
+      if (!match) return [];
+
+      let insumos = initialInsumos;
+      const cachedIns = localStorage.getItem('harpia_insumos_v2');
+      if (cachedIns) {
+        const parsedIns = JSON.parse(cachedIns);
+        if (Array.isArray(parsedIns) && parsedIns.length > 0) insumos = parsedIns;
+      }
+
+      return match.itens.map((it) => {
+        const ins = insumos.find((i) => i.id === it.insumo_id);
+        return ins?.nome || 'Ingrediente';
+      });
+    } catch {
+      return [];
+    }
+  }, [produto]);
+
+  const totalVenda = precoPraticado * (quantidade || 0);
+  const totalCusto = precoCusto * (quantidade || 0);
+  const totalLucro = totalVenda - totalCusto;
+
+  const handleSavePrice = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = parseFloat(customPriceInput.replace(',', '.'));
+    if (!isNaN(val) && val >= 0) {
+      setCustomPrice(produto.id, val);
+      setSavedFeedback(true);
+      setTimeout(() => setSavedFeedback(false), 2000);
+    }
+  };
+
+  const handleResetPrice = () => {
+    removeCustomPrice(produto.id);
+    setCustomPriceInput(precoCusto.toFixed(2));
+  };
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
@@ -86,6 +151,11 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   {produto.sku}
                 </span>
               )}
+              {isIndividual && (
+                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300">
+                  Preço Customizado
+                </span>
+              )}
             </div>
 
             <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 leading-snug">
@@ -104,76 +174,99 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
         {/* Corpo com rolagem */}
         <div className="p-4 sm:p-6 overflow-y-auto space-y-4 sm:space-y-5 text-sm">
           
-          {/* Card de Preço Ativo */}
-          <div className="bg-gradient-to-br from-emerald-500/10 to-teal-500/5 rounded-xl p-4 border border-emerald-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <span className="text-[11px] uppercase tracking-wider font-bold text-emerald-800 block">
-                Preço Disponível ({vendedorKey ? vendedorKey.toUpperCase() : 'BALCÃO'})
-              </span>
-              <div className="flex items-baseline gap-2 mt-0.5">
-                <span className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                  {formatCurrency(precoAtivo)}
+          {/* Card de Preço de Custo e Preço Praticado */}
+          <div className="bg-gradient-to-br from-emerald-50 to-teal-50/40 rounded-2xl p-4 border border-emerald-500/20 space-y-3.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-emerald-200/60">
+              {/* Preço de Custo Fábrica */}
+              <div>
+                <span className="text-[10px] uppercase tracking-wider font-extrabold text-slate-500 block">
+                  Seu Preço de Custo (Fábrica)
                 </span>
-                <span className="text-xs font-medium text-slate-500">
-                  /{unidadeTexto}
+                <div className="flex items-baseline gap-1 mt-0.5">
+                  <span className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">
+                    {formatCurrency(precoCusto)}
+                  </span>
+                  <span className="text-xs font-medium text-slate-500">
+                    /{unidadeTexto}
+                  </span>
+                </div>
+              </div>
+
+              {/* Preço Praticado Atual */}
+              <div className="sm:text-right">
+                <span className="text-[10px] uppercase tracking-wider font-extrabold text-[#006837] block">
+                  Seu Preço de Venda (Praticado)
                 </span>
+                <div className="flex items-baseline sm:justify-end gap-1 mt-0.5">
+                  <span className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight">
+                    {formatCurrency(precoPraticado)}
+                  </span>
+                  <span className="text-xs font-medium text-slate-500">
+                    /{unidadeTexto}
+                  </span>
+                </div>
               </div>
             </div>
 
-            {comissaoPorcentagem > 0 && (
-              <div className="bg-white rounded-lg p-2.5 border border-emerald-200 shadow-2xs shrink-0">
-                <span className="text-[10px] text-slate-500 block uppercase font-medium">
-                  Sua Comissão ({formatPercent(comissaoPorcentagem)})
+            {/* Ajuste Individual do Preço Praticado deste Produto */}
+            <form onSubmit={handleSavePrice} className="space-y-2">
+              <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Edit3 size={13} className="text-[#006837]" />
+                  Ajustar preço de venda deste produto:
                 </span>
-                <span className="text-base font-black text-[#006837]">
-                  +{formatCurrency(comissaoUnitaria)} /sc
-                </span>
+                {savedFeedback && (
+                  <span className="text-emerald-700 font-bold text-[11px] flex items-center gap-1">
+                    <Check size={12} /> Salvo com sucesso!
+                  </span>
+                )}
+              </label>
+
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                    R$
+                  </span>
+                  <input
+                    type="number"
+                    step="0.10"
+                    min="0"
+                    value={customPriceInput}
+                    onChange={(e) => setCustomPriceInput(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl text-sm font-black text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-[#006837]"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="bg-[#006837] hover:bg-[#00522c] text-white px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-2xs"
+                >
+                  Salvar Preço
+                </button>
+
+                {isIndividual && (
+                  <button
+                    type="button"
+                    onClick={handleResetPrice}
+                    className="bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 px-3 py-2 rounded-xl text-xs font-semibold transition"
+                    title="Remover ajuste individual e voltar ao padrão"
+                  >
+                    <RotateCcw size={14} />
+                  </button>
+                )}
               </div>
-            )}
+
+              {lucroUnitario > 0 && (
+                <div className="text-[11px] font-bold text-[#006837] bg-white px-2.5 py-1 rounded-lg border border-emerald-200/80 inline-flex items-center gap-1">
+                  <TrendingUp size={12} />
+                  <span>
+                    Sua margem de ganho neste produto: <strong>+{formatCurrency(lucroUnitario)}/sc</strong> (+{lucroPercent.toFixed(1)}%)
+                  </span>
+                </div>
+              )}
+            </form>
           </div>
-
-          {/* Tabela de Preços dos Vendedores Oficiais */}
-          {produto.precos_vendedores && (
-            <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200">
-              <div className="flex items-center gap-1.5 mb-2.5 text-xs font-bold text-slate-700">
-                <DollarSign size={14} className="text-[#006837]" />
-                <span>Tabela Oficial Harpia por Vendedor</span>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                {vendedoresTabela.map((v) => {
-                  const isCurrent = (vendedorKey || 'balcao') === v.key;
-                  const price = getPrecoVendedor(produto, v.key);
-
-                  return (
-                    <div
-                      key={v.key}
-                      className={`rounded-lg p-2 border transition ${
-                        isCurrent
-                          ? 'bg-emerald-50/80 border-emerald-300 ring-1 ring-emerald-500/30'
-                          : 'bg-white border-slate-200/80'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className={`text-[11px] font-bold block ${isCurrent ? 'text-[#006837]' : 'text-slate-700'}`}>
-                          {v.label}
-                        </span>
-                        {isCurrent && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#006837]" />
-                        )}
-                      </div>
-                      <span className="text-[10px] text-slate-400 block -mt-0.5">
-                        {v.desc}
-                      </span>
-                      <span className="text-xs font-black text-slate-900 mt-1 block">
-                        {formatCurrency(price)}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
 
           {/* Informações Técnicas */}
           <div className="space-y-2.5">
@@ -212,6 +305,23 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 </div>
               </div>
             )}
+
+            {ingredientes.length > 0 && (
+              <div className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-200/80 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <strong className="text-xs font-bold text-[#006837] flex items-center gap-1.5">
+                    <Sparkles size={14} className="text-amber-500" />
+                    Composição Qualitativa (Ingredientes):
+                  </strong>
+                  <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded-md">
+                    {ingredientes.length} matérias-primas
+                  </span>
+                </div>
+                <p className="text-xs text-slate-700 leading-relaxed font-medium bg-white/70 p-2.5 rounded-lg border border-emerald-100">
+                  {ingredientes.join(', ')}.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Simulador de Proposta por Quantidade */}
@@ -235,16 +345,22 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             </div>
 
             <div className="grid grid-cols-2 gap-3 pt-2.5 border-t border-slate-200">
-              <div className="bg-white p-2 rounded-lg border border-slate-200/80">
-                <span className="text-[10px] uppercase font-semibold text-slate-400 block">Total Proposta</span>
-                <span className="text-base font-extrabold text-slate-900">
+              <div className="bg-white p-2.5 rounded-lg border border-slate-200/80">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Proposta Cliente</span>
+                <span className="text-base font-black text-slate-900">
                   {formatCurrency(totalVenda)}
                 </span>
+                <span className="text-[10px] text-slate-500 block mt-0.5">
+                  ({quantidade}x {formatCurrency(precoPraticado)})
+                </span>
               </div>
-              <div className="bg-emerald-50/70 p-2 rounded-lg border border-emerald-200/80 text-right">
-                <span className="text-[10px] uppercase font-semibold text-emerald-700 block">Sua Comissão Total</span>
-                <span className="text-base font-extrabold text-[#006837]">
-                  {formatCurrency(totalComissao)}
+              <div className="bg-emerald-50/70 p-2.5 rounded-lg border border-emerald-200/80 text-right">
+                <span className="text-[10px] uppercase font-bold text-emerald-800 block">Sua Margem / Lucro Estimado</span>
+                <span className="text-base font-black text-[#006837]">
+                  +{formatCurrency(totalLucro)}
+                </span>
+                <span className="text-[10px] text-emerald-700 block mt-0.5">
+                  Custo Fábrica: {formatCurrency(totalCusto)}
                 </span>
               </div>
             </div>
@@ -256,6 +372,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
         <div className="p-3.5 sm:p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={onClose}
               className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-200/70 rounded-xl transition"
             >
@@ -263,16 +380,17 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             </button>
 
             <button
+              type="button"
               onClick={() => shareOnWhatsApp(
                 produto.nome,
                 unidadeTexto,
-                precoAtivo,
+                precoPraticado,
                 vendedorNome,
                 produto.indicacoes,
                 produto.consumo_recomendado
               )}
               className="inline-flex items-center justify-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-3 py-2 rounded-xl transition"
-              title="Compartilhar apenas este item"
+              title="Compartilhar proposta no WhatsApp com seu preço praticado"
             >
               <Share2 size={13} />
               <span>WhatsApp</span>
@@ -281,8 +399,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={() => {
-                addToCart(produto, quantidade, vendedorKey);
+                addToCart(produto, quantidade, vendedorKey, precoPraticado);
                 setAddedFeedback(true);
                 setTimeout(() => setAddedFeedback(false), 2000);
               }}
@@ -296,6 +415,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
             {addedFeedback && (
               <button
+                type="button"
                 onClick={() => {
                   onClose();
                   setIsCartOpen(true);

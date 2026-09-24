@@ -750,6 +750,14 @@ const FormulasSection: React.FC<FormulasSectionProps> = ({ insumos, formulas, se
   const [expandedFormulaId, setExpandedFormulaId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [newProdutoId, setNewProdutoId] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Filtragem por busca
+  const filteredFormulas = formulas.filter(f => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase().trim();
+    return f.produto_nome.toLowerCase().includes(term);
+  });
 
   // ─── Criar nova fórmula ────
   const handleCreate = () => {
@@ -835,6 +843,29 @@ const FormulasSection: React.FC<FormulasSectionProps> = ({ insumos, formulas, se
         </div>
       )}
 
+      {/* Barra de Pesquisa de Fórmulas */}
+      {formulas.length > 0 && (
+        <div className="relative">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Buscar fórmula por nome do produto..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="w-full pl-9 pr-8 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm font-medium focus:ring-2 focus:ring-[#006837] focus:outline-hidden"
+          />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-md"
+              title="Limpar busca"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Lista de fórmulas */}
       {formulas.length === 0 && !isCreating ? (
         <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-slate-400 shadow-2xs">
@@ -842,9 +873,19 @@ const FormulasSection: React.FC<FormulasSectionProps> = ({ insumos, formulas, se
           <p className="text-sm font-medium">Nenhuma fórmula cadastrada.</p>
           <p className="text-xs mt-1">Clique em "Nova Fórmula" para começar a compor suas rações.</p>
         </div>
+      ) : filteredFormulas.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500 shadow-2xs space-y-2">
+          <p className="text-sm">Nenhuma fórmula encontrada para "<strong>{searchTerm}</strong>".</p>
+          <button
+            onClick={() => setSearchTerm('')}
+            className="text-xs font-bold text-[#006837] hover:underline"
+          >
+            Limpar busca
+          </button>
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
-          {formulas.map(formula => {
+          {filteredFormulas.map(formula => {
             const isExpanded = expandedFormulaId === formula.id;
             const custoInsumos = calcCustoInsumosTon(formula.itens, insumos);
             const custoExtras = calcCustosExtras(formula.custos_extras, custoInsumos);
@@ -1385,6 +1426,8 @@ interface VisaoGeralSectionProps {
 }
 
 const VisaoGeralSection: React.FC<VisaoGeralSectionProps> = ({ formulas, insumos, produtos }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+
   if (formulas.length === 0) {
     return (
       <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-slate-400 shadow-2xs">
@@ -1395,15 +1438,55 @@ const VisaoGeralSection: React.FC<VisaoGeralSectionProps> = ({ formulas, insumos
     );
   }
 
+  const filteredFormulas = formulas.filter(f => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase().trim();
+    return f.produto_nome.toLowerCase().includes(term);
+  });
+
   return (
     <div className="space-y-3">
-      <div>
-        <h3 className="font-bold text-slate-800 text-base">Visão Geral de Custos × Preços de Venda</h3>
-        <p className="text-xs text-slate-500">Comparativo entre custo de produção e preço de venda para todos os produtos formulados.</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <h3 className="font-bold text-slate-800 text-base">Visão Geral de Custos × Preços de Venda</h3>
+          <p className="text-xs text-slate-500">Comparativo entre custo de produção e preço de venda para todos os produtos formulados.</p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {formulas.map(formula => {
+      {/* Barra de Pesquisa */}
+      <div className="relative">
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <input
+          type="text"
+          placeholder="Buscar produto formulado..."
+          value={searchTerm}
+          onChange={e => setSearchTerm(e.target.value)}
+          className="w-full pl-9 pr-8 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm font-medium focus:ring-2 focus:ring-[#006837] focus:outline-hidden"
+        />
+        {searchTerm && (
+          <button
+            onClick={() => setSearchTerm('')}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-md"
+            title="Limpar busca"
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
+
+      {filteredFormulas.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500 shadow-2xs space-y-2">
+          <p className="text-sm">Nenhum produto encontrado para "<strong>{searchTerm}</strong>".</p>
+          <button
+            onClick={() => setSearchTerm('')}
+            className="text-xs font-bold text-[#006837] hover:underline"
+          >
+            Limpar busca
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {filteredFormulas.map(formula => {
           const prod = produtos.find(p => p.id === formula.produto_id);
           const custoInsumosTon = calcCustoInsumosTon(formula.itens, insumos);
           const custoExtrasTon = calcCustosExtras(formula.custos_extras, custoInsumosTon);
@@ -1476,6 +1559,7 @@ const VisaoGeralSection: React.FC<VisaoGeralSectionProps> = ({ formulas, insumos
           );
         })}
       </div>
+      )}
     </div>
   );
 };

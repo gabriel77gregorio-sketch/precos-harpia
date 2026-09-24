@@ -3,6 +3,7 @@ import { supabase } from './lib/supabase';
 import type { Produto, Categoria, Profile } from './types/database';
 import { initialCategorias, initialProdutos } from './data/initialCatalog';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { SellerPricingProvider } from './context/SellerPricingContext';
 import { CartProvider } from './context/CartContext';
 import { CartDrawer } from './components/cart/CartDrawer';
 import { CartFloatingButton } from './components/cart/CartFloatingButton';
@@ -86,7 +87,7 @@ const MainContent: React.FC = () => {
   // Inicialização direta e imediata com o catálogo completo
   const [produtos, setProdutos] = useState<Produto[]>(() => {
     try {
-      const cached = localStorage.getItem('harpia_cached_produtos_v7');
+      const cached = localStorage.getItem('harpia_cached_produtos_v8');
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length >= 60) {
@@ -186,7 +187,7 @@ const MainContent: React.FC = () => {
         const listaCompleta = [...mapped, ...produtosFaltantes];
 
         setProdutos(listaCompleta);
-        localStorage.setItem('harpia_cached_produtos_v7', JSON.stringify(listaCompleta));
+        localStorage.setItem('harpia_cached_produtos_v8', JSON.stringify(listaCompleta));
       }
 
       if (profRes.data && profRes.data.length > 0) {
@@ -280,9 +281,11 @@ const MainContent: React.FC = () => {
 export default function App() {
   return (
     <AuthProvider>
-      <CartProvider>
-        <MainContent />
-      </CartProvider>
+      <SellerPricingProvider>
+        <CartProvider>
+          <MainContent />
+        </CartProvider>
+      </SellerPricingProvider>
     </AuthProvider>
   );
 }

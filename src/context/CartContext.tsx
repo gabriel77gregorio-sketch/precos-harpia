@@ -33,10 +33,17 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [items]);
 
-  const addToCart = (produto: Produto, quantidade = 1, customVendedorKey?: VendedorKey) => {
+  const addToCart = (
+    produto: Produto,
+    quantidade = 1,
+    customVendedorKey?: VendedorKey,
+    precoVendaPraticado?: number
+  ) => {
     const vKey = customVendedorKey || profile?.vendedor_key || 'luciano';
-    const preco = getPrecoVendedor(produto, vKey);
+    const precoCusto = getPrecoVendedor(produto, vKey);
+    const preco = precoVendaPraticado !== undefined && precoVendaPraticado > 0 ? precoVendaPraticado : precoCusto;
     const comissaoUnit = calculateCommission(preco, comissaoPorcentagem);
+    const lucroUnit = Math.max(0, preco - precoCusto);
     const pesoUnit = produto.peso_unitario || 0;
 
     setItems((prev) => {
@@ -44,12 +51,20 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (index >= 0) {
         const updated = [...prev];
         const novaQtd = updated[index].quantidade + quantidade;
+        // Se foi passado novo preço praticado, usa ele; senão mantém o anterior
+        const precoItem = precoVendaPraticado !== undefined && precoVendaPraticado > 0
+          ? precoVendaPraticado
+          : updated[index].precoUnitario || preco;
+        const lucroAtualUnit = Math.max(0, precoItem - (updated[index].precoCusto || precoCusto));
+
         updated[index] = {
           ...updated[index],
           quantidade: novaQtd,
-          precoUnitario: preco,
-          subtotal: preco * novaQtd,
+          precoUnitario: precoItem,
+          precoCusto: updated[index].precoCusto || precoCusto,
+          subtotal: precoItem * novaQtd,
           comissaoSubtotal: comissaoUnit * novaQtd,
+          lucroSubtotal: lucroAtualUnit * novaQtd,
           pesoTotalKg: pesoUnit * novaQtd
         };
         return updated;
@@ -61,9 +76,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           produto,
           quantidade,
           precoUnitario: preco,
+          precoCusto,
           vendedorKey: vKey,
           subtotal: preco * quantidade,
           comissaoSubtotal: comissaoUnit * quantidade,
+          lucroSubtotal: lucroUnit * quantidade,
           pesoTotalKg: pesoUnit * quantidade
         }
       ];
@@ -80,12 +97,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       prev.map((item) => {
         if (item.produto.id === produtoId) {
           const comissaoUnit = calculateCommission(item.precoUnitario, comissaoPorcentagem);
+          const lucroUnit = Math.max(0, item.precoUnitario - (item.precoCusto || item.precoUnitario));
           const pesoUnit = item.produto.peso_unitario || 0;
           return {
             ...item,
             quantidade,
             subtotal: item.precoUnitario * quantidade,
             comissaoSubtotal: comissaoUnit * quantidade,
+            lucroSubtotal: lucroUnit * quantidade,
             pesoTotalKg: pesoUnit * quantidade
           };
         }
@@ -111,6 +130,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const totalValor = useMemo(() => items.reduce((acc, i) => acc + i.subtotal, 0), [items]);
   const totalPesoKg = useMemo(() => items.reduce((acc, i) => acc + i.pesoTotalKg, 0), [items]);
   const totalComissao = useMemo(() => items.reduce((acc, i) => acc + i.comissaoSubtotal, 0), [items]);
+  const totalLucro = useMemo(() => items.reduce((acc, i) => acc + (i.lucroSubtotal || 0), 0), [items]);
 
   return (
     <CartContext.Provider
@@ -125,6 +145,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         totalValor,
         totalPesoKg,
         totalComissao,
+        totalLucro,
         isCartOpen,
         setIsCartOpen
       }}
