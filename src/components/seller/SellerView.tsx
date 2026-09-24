@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import type { Produto, Categoria, TipoSecao } from '../../types/database';
+import type { Produto, Categoria } from '../../types/database';
 import { ProductListItem } from './ProductListItem';
 import { ProductDetailModal } from './ProductDetailModal';
 import { FamilyGrid } from './FamilyGrid';
@@ -13,9 +13,14 @@ import {
   Wheat,
   Filter,
   ArrowLeft,
-  ShoppingCart
+  ShoppingCart,
+  FlaskConical
 } from 'lucide-react';
 import { formatPercent, getFamiliaColorConfig, isItemInsumo, matchProdutoFamilia } from '../../lib/utils';
+import { MateriasPrimasTable } from './MateriasPrimasTable';
+import { ReceitasView } from './ReceitasView';
+import { initialInsumos } from '../../data/initialInsumos';
+import { initialFormulas } from '../../data/initialFormulas';
 
 interface SellerViewProps {
   produtos: Produto[];
@@ -34,8 +39,8 @@ export const SellerView: React.FC<SellerViewProps> = ({
   const { totalItems, setIsCartOpen } = useCart();
   const [searchTerm, setSearchTerm] = useState('');
   
-  // 1. As duas grandes separações solicitadas: Rações e Insumos
-  const [secaoAtiva, setSecaoAtiva] = useState<TipoSecao>('racoes');
+  // 1. As três grandes seções: Rações, Matérias-Primas e Receitas
+  const [secaoAtiva, setSecaoAtiva] = useState<'racoes' | 'insumos' | 'receitas'>('racoes');
   
   // 2. Família selecionada (null = mostra a grade de opções de famílias)
   const [selectedFamily, setSelectedFamily] = useState<string | null>(null);
@@ -46,13 +51,9 @@ export const SellerView: React.FC<SellerViewProps> = ({
   const comissao = profile?.comissao_porcentagem || 8.0;
   const vendedorKey = profile?.vendedor_key || 'luciano';
 
-  // Contagem por seção considerando a regra de nome comercial
+  // Contagem de rações ativas
   const countRacoes = useMemo(
     () => produtos.filter(p => !isItemInsumo(p) && p.ativo).length,
-    [produtos]
-  );
-  const countInsumos = useMemo(
-    () => produtos.filter(p => isItemInsumo(p) && p.ativo).length,
     [produtos]
   );
 
@@ -171,50 +172,51 @@ export const SellerView: React.FC<SellerViewProps> = ({
       {/* ÁREA SUPERIOR FIXA: Campo de Busca (Web e Mobile) e Seletor Rações/Insumos */}
       <div className="sticky top-[53px] sm:top-[61px] z-30 bg-slate-100/95 backdrop-blur-md py-2 -mx-2 px-2 sm:-mx-3 sm:px-3 space-y-2.5 border-b border-slate-200/80 shadow-2xs">
         
-        {/* Campo de Busca Superior (Web & Mobile) */}
-        <div className="relative">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          <input
-            type="text"
-            placeholder="Buscar por nome (ex: Lac 22, Engorda), peso (40kg, 20kg), insumo..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-20 py-2.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-[#006837] focus:border-[#006837] shadow-2xs placeholder:text-slate-400 transition"
-          />
-          {searchTerm ? (
-            <button
-              onClick={() => setSearchTerm('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-lg transition"
-            >
-              Limpar
-            </button>
-          ) : (
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-medium text-slate-400 hidden sm:inline">
-              Busca em tempo real
-            </span>
-          )}
-        </div>
+        {/* Campo de Busca Superior para Rações */}
+        {secaoAtiva === 'racoes' && (
+          <div className="relative">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input
+              type="text"
+              placeholder="Buscar por nome (ex: Lac 22, Engorda), peso (40kg, 20kg)..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-20 py-2.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-[#006837] focus:border-[#006837] shadow-2xs placeholder:text-slate-400 transition"
+            />
+            {searchTerm ? (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-lg transition"
+              >
+                Limpar
+              </button>
+            ) : (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-medium text-slate-400 hidden sm:inline">
+                Busca em tempo real
+              </span>
+            )}
+          </div>
+        )}
 
-        {/* AS DUAS GRANDES SEPARAÇÕES: RAÇÕES E INSUMOS */}
+        {/* AS TRÊS GRANDES SEPARAÇÕES: RAÇÕES, MATÉRIAS-PRIMAS E RECEITAS */}
         <div className="flex items-center justify-between gap-2">
-          <div className="grid grid-cols-2 p-1 bg-slate-200/80 rounded-xl w-full sm:max-w-md shadow-inner">
+          <div className="grid grid-cols-3 p-1 bg-slate-200/80 rounded-xl w-full sm:max-w-lg shadow-inner">
             <button
               onClick={() => {
                 setSecaoAtiva('racoes');
-                // Ao clicar em Rações, reseta para mostrar a grade de famílias caso queira navegar
                 if (secaoAtiva !== 'racoes') {
                   setSelectedFamily(null);
                   setSearchTerm('');
                 }
               }}
-              className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-bold transition-all duration-150 ${
+              className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-bold transition-all duration-150 ${
                 secaoAtiva === 'racoes'
                   ? 'bg-white text-[#006837] shadow-xs scale-[1.01]'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
               }`}
             >
-              <Wheat size={15} className={secaoAtiva === 'racoes' ? 'text-[#006837]' : 'text-slate-500'} />
-              <span>Rações & Produtos</span>
+              <Wheat size={14} className={secaoAtiva === 'racoes' ? 'text-[#006837]' : 'text-slate-500'} />
+              <span>Rações</span>
               <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
                 secaoAtiva === 'racoes' ? 'bg-emerald-100 text-[#006837]' : 'bg-slate-300/80 text-slate-700'
               }`}>
@@ -227,18 +229,38 @@ export const SellerView: React.FC<SellerViewProps> = ({
                 setSecaoAtiva('insumos');
                 setSelectedFamily(null);
               }}
-              className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-bold transition-all duration-150 ${
+              className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-bold transition-all duration-150 ${
                 secaoAtiva === 'insumos'
-                  ? 'bg-white text-orange-800 shadow-xs scale-[1.01]'
+                  ? 'bg-white text-[#006837] shadow-xs scale-[1.01]'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
               }`}
             >
-              <Layers size={15} className={secaoAtiva === 'insumos' ? 'text-orange-600' : 'text-slate-500'} />
-              <span>Insumos</span>
+              <Layers size={14} className={secaoAtiva === 'insumos' ? 'text-[#006837]' : 'text-slate-500'} />
+              <span>Matérias-Primas</span>
               <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
-                secaoAtiva === 'insumos' ? 'bg-orange-100 text-orange-800' : 'bg-slate-300/80 text-slate-700'
+                secaoAtiva === 'insumos' ? 'bg-emerald-100 text-[#006837]' : 'bg-slate-300/80 text-slate-700'
               }`}>
-                {countInsumos}
+                {initialInsumos.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => {
+                setSecaoAtiva('receitas');
+                setSelectedFamily(null);
+              }}
+              className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-bold transition-all duration-150 ${
+                secaoAtiva === 'receitas'
+                  ? 'bg-white text-amber-800 shadow-xs scale-[1.01]'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+              }`}
+            >
+              <FlaskConical size={14} className={secaoAtiva === 'receitas' ? 'text-amber-700' : 'text-slate-500'} />
+              <span>Receitas (1t)</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                secaoAtiva === 'receitas' ? 'bg-amber-100 text-amber-800' : 'bg-slate-300/80 text-slate-700'
+              }`}>
+                {initialFormulas.length}
               </span>
             </button>
           </div>
@@ -246,7 +268,11 @@ export const SellerView: React.FC<SellerViewProps> = ({
           <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-500 font-medium shrink-0">
             <Filter size={13} className="text-slate-400" />
             <span>
-              {showFamilyGrid
+              {secaoAtiva === 'receitas'
+                ? `${initialFormulas.length} Receitas & Fórmulas (1t)`
+                : secaoAtiva === 'insumos'
+                ? `${initialInsumos.length} Matérias-Primas`
+                : showFamilyGrid
                 ? '7 Famílias Disponíveis'
                 : `Exibindo ${filteredProdutos.length} itens`}
             </span>
@@ -315,7 +341,11 @@ export const SellerView: React.FC<SellerViewProps> = ({
       </div>
 
       {/* ÁREA DE CONTEÚDO */}
-      {loading && produtos.length === 0 ? (
+      {secaoAtiva === 'receitas' ? (
+        <ReceitasView />
+      ) : secaoAtiva === 'insumos' ? (
+        <MateriasPrimasTable />
+      ) : loading && produtos.length === 0 ? (
         <div className="py-16 text-center">
           <RefreshCw size={28} className="animate-spin mx-auto text-[#006837] mb-2" />
           <p className="text-sm font-medium text-slate-600">Atualizando tabela de preços oficiais...</p>

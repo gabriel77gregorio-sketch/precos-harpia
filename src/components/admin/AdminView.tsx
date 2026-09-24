@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import type { Produto, Categoria, Profile, UnidadeTipo } from '../../types/database';
 import { supabase } from '../../lib/supabase';
 import { formatCurrency, formatPercent, getUnidadeLabel } from '../../lib/utils';
+import { FormulacaoView } from './FormulacaoView';
 import {
   Package,
   Users,
   FolderTree,
+  FlaskConical,
   Plus,
   Edit2,
   Trash2,
@@ -31,7 +33,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
   loading,
   onRefresh
 }) => {
-  const [activeTab, setActiveTab] = useState<'produtos' | 'vendedores' | 'categorias'>('produtos');
+  const [activeTab, setActiveTab] = useState<'produtos' | 'vendedores' | 'categorias' | 'formulacao'>('produtos');
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Estados para Produto Modal
@@ -293,6 +295,18 @@ export const AdminView: React.FC<AdminViewProps> = ({
         >
           <FolderTree size={17} />
           <span>Categorias ({categorias.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('formulacao')}
+          className={`flex items-center gap-2 pb-3 px-2 text-sm font-bold border-b-2 transition shrink-0 ${
+            activeTab === 'formulacao'
+              ? 'border-[#006837] text-[#006837]'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <FlaskConical size={17} />
+          <span>Formulação & Custos</span>
         </button>
       </div>
 
@@ -569,6 +583,11 @@ export const AdminView: React.FC<AdminViewProps> = ({
             ))}
           </div>
         </div>
+      )}
+
+      {/* CONTEÚDO DA ABA 4: FORMULAÇÃO & CUSTOS */}
+      {activeTab === 'formulacao' && (
+        <FormulacaoView produtos={produtos} />
       )}
 
       {/* MODAL CRIAR/EDITAR PRODUTO */}

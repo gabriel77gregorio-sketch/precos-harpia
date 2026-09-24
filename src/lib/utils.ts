@@ -344,3 +344,44 @@ export function matchProdutoFamilia(produto: Produto, familyId?: string | null):
 
   return false;
 }
+
+/**
+ * Retorna os estilos visuais de badge para a categoria da matéria-prima
+ */
+export function getCategoriaBadgeStyle(cat?: string) {
+  const c = (cat || '').toUpperCase().trim();
+  switch (c) {
+    case 'MACRO':
+      return { bg: 'bg-blue-100/80', text: 'text-blue-800', border: 'border-blue-200', dot: 'bg-blue-600' };
+    case 'MICRO':
+      return { bg: 'bg-purple-100/80', text: 'text-purple-800', border: 'border-purple-200', dot: 'bg-purple-600' };
+    case 'ADITIVO':
+      return { bg: 'bg-amber-100/80', text: 'text-amber-900', border: 'border-amber-200', dot: 'bg-amber-600' };
+    case 'PMH':
+      return { bg: 'bg-emerald-100/80', text: 'text-emerald-900', border: 'border-emerald-200', dot: 'bg-emerald-600' };
+    case 'SAS':
+      return { bg: 'bg-indigo-100/80', text: 'text-indigo-900', border: 'border-indigo-200', dot: 'bg-indigo-600' };
+    case 'PINHALZINHO':
+      return { bg: 'bg-rose-100/80', text: 'text-rose-900', border: 'border-rose-200', dot: 'bg-rose-600' };
+    default:
+      return { bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-200', dot: 'bg-slate-500' };
+  }
+}
+
+/**
+ * Formata data no formato brasileiro dd/mm/aaaa
+ */
+export function formatDateBR(dateStr?: string): string {
+  if (!dateStr) return '23/09/2026';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  } catch {
+    return '23/09/2026';
+  }
+}
