@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import harpiaLogoUrl from '../../assets/hero.png';
+import harpiaLogoUrl from '../../assets/logo-harpia.jpg';
 
 // ─── Storage Keys ────────────────────────────────────────────
 const STORAGE_INSUMOS = 'harpia_insumos_v2';
@@ -105,7 +105,7 @@ async function gerarPdfFormula(
   // Logo
   const logoBase64 = await loadLogoBase64();
   if (logoBase64) {
-    doc.addImage(logoBase64, 'PNG', 14, 8, 35, 18);
+    doc.addImage(logoBase64, 'JPEG', 14, 6.5, 45, 18.6);
   }
 
   // Header

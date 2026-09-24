@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import harpiaLogoUrl from '../../assets/hero.png';
+import harpiaLogoUrl from '../../assets/logo-harpia.jpg';
 
 interface ReceitasViewProps {
   insumos?: Insumo[];
@@ -174,7 +174,7 @@ export const ReceitasView: React.FC<ReceitasViewProps> = ({
         reader.onloadend = () => resolve(reader.result as string);
         reader.readAsDataURL(blob);
       });
-      doc.addImage(base64, 'PNG', 14, 8, 35, 18);
+      doc.addImage(base64, 'JPEG', 14, 6.5, 45, 18.6);
     } catch { /* logo opcional */ }
 
     doc.setFontSize(16);
